@@ -29,6 +29,18 @@ I open-source this project from the heart, and I invite you to hack, contribute,
 
 ---
 
+## 🏁 HRI Hackathon Thailand 2026 — Team Fork
+
+This fork is our team's entry for HRI Hackathon Thailand 2026 (AI Expo Thailand 2026).
+
+- 🔍 **Baseline audit** of upstream `bef80bd`: [docs/hackathon/BASELINE_AUDIT.md](./docs/hackathon/BASELINE_AUDIT.md) — 8 gaps with file/line evidence
+- 🧭 **Plan** for Baseline Completion + Theme Feature *HRI Wellness Living Lab*: [docs/hackathon/HACKDAY_PLAN.md](./docs/hackathon/HACKDAY_PLAN.md)
+- 🧪 **Living Lab protocol** (measures, consent, pre-specified analysis): [docs/hackathon/LIVING_LAB_PROTOCOL.md](./docs/hackathon/LIVING_LAB_PROTOCOL.md)
+
+Implementation happens on Hack Day (3 Oct 2026); see the commit history and `CHANGELOG.md` for what changed from upstream.
+
+---
+
 ## 🗺️ The Four Core Ecosystem Layers
 
 The platform collects, normalizes, classifies, and visualizes four connected layers of the robotics landscape:
