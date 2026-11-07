@@ -39,7 +39,14 @@ const scaleWithEnds = (low: string, high: string): ScaleOption[] => [
   { value: 5, word: high }
 ];
 
-const LONELINESS_SCALE = scaleWithEnds("ไม่เหงา", "เหงามาก");
+// Loneliness runs the other way: 5 = very lonely, so the sad face sits at 5.
+const LONELINESS_SCALE: ScaleOption[] = [
+  { value: 1, face: "😄", word: "ไม่เหงา" },
+  { value: 2, face: "🙂" },
+  { value: 3, face: "😐" },
+  { value: 4, face: "🙁" },
+  { value: 5, face: "😞", word: "เหงามาก" }
+];
 const TRUST_SCALE = scaleWithEnds("ไม่ไว้ใจเลย", "ไว้ใจมาก");
 const ENGAGEMENT_SCALE = scaleWithEnds("น้อยมาก", "มากที่สุด");
 
@@ -508,7 +515,7 @@ const STYLES = `
 .ll-choice-body { align-items: center; background: var(--surface); border: 2px solid var(--text-secondary); border-radius: 8px; box-sizing: border-box; display: flex; flex-direction: column; height: 100%; justify-content: flex-start; min-height: 64px; min-width: 44px; padding: 8px 2px; position: relative; text-align: center; }
 .ll-face { font-size: 30px; line-height: 1.2; }
 .ll-number { font-size: 22px; font-weight: 700; line-height: 1.3; }
-.ll-word { font-size: 14px; line-height: 1.25; overflow-wrap: anywhere; }
+.ll-word { font-size: 16px; line-height: 1.25; overflow-wrap: anywhere; }
 .ll-check { color: var(--surface); display: none; font-size: 14px; font-weight: 700; line-height: 1; position: absolute; right: 4px; top: 4px; }
 .ll-radio:hover + .ll-choice-body { background: var(--surface-muted); }
 .ll-radio:checked + .ll-choice-body { background: var(--accent-strong); border-color: var(--accent-strong); color: var(--surface); }
