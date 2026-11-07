@@ -1,22 +1,26 @@
 "use client";
 
 import { useRef, useState, type FormEvent } from "react";
+import { ACTIVITIES, PARTICIPANT_GROUPS, SETTINGS, label } from "@/lib/wellness";
 
 /*
- * Living Lab session form: UI and local state only.
+ * Living Lab session form.
  *
- * Nothing here is sent or stored: there is no API or schema for Living Lab in
- * the project yet. The keys in FormValues are local names for this component,
- * not agreed API or database fields.
+ * The UI, the consent step, the face scales and the accessibility rules are the
+ * form as designed. The vocabulary now comes from lib/wellness (the same lists
+ * the API validates against) and submitting posts to /api/living-lab/sessions.
  */
 
 type SelectOption = { value: string; label: string };
 
-// Waiting for the team: the project has no public list for these fields yet.
-const ROBOT_OPTIONS: SelectOption[] = [];
-const GROUP_OPTIONS: SelectOption[] = [];
-const SETTING_OPTIONS: SelectOption[] = [];
-const ACTIVITY_OPTIONS: SelectOption[] = [];
+export type RobotOption = { id: string; canonicalName: string };
+
+const toOptions = (values: readonly string[]): SelectOption[] =>
+  values.map((value) => ({ value, label: label("th", value) }));
+
+const GROUP_OPTIONS = toOptions(PARTICIPANT_GROUPS);
+const SETTING_OPTIONS = toOptions(SETTINGS);
+const ACTIVITY_OPTIONS = toOptions(ACTIVITIES);
 
 const CONSENT_SCRIPT =
   "เรากำลังทดลองใช้หุ่นยนต์เพื่อดูว่าช่วยให้รู้สึกดีขึ้นหรือไม่ จะถามคำถามสั้น ๆ ก่อนและหลัง ไม่มีการบันทึกชื่อ รูป หรือเสียง และหยุดได้ทุกเมื่อ ยินดีเข้าร่วมไหมคะ/ครับ";
@@ -100,12 +104,13 @@ const EMPTY_VALUES: FormValues = {
   safetyIncident: ""
 };
 
-const SELECT_FIELDS = [
-  { key: "robot", options: ROBOT_OPTIONS },
-  { key: "group", options: GROUP_OPTIONS },
-  { key: "setting", options: SETTING_OPTIONS },
-  { key: "activity", options: ACTIVITY_OPTIONS }
-] as const;
+const selectFields = (robots: RobotOption[]) =>
+  [
+    { key: "robot", options: robots.map((r) => ({ value: r.id, label: r.canonicalName })) },
+    { key: "group", options: GROUP_OPTIONS },
+    { key: "setting", options: SETTING_OPTIONS },
+    { key: "activity", options: ACTIVITY_OPTIONS }
+  ] as const;
 
 const RATING_FIELDS = [
   "moodBefore",
@@ -118,10 +123,10 @@ const RATING_FIELDS = [
 
 const fieldId = (key: FieldKey) => `living-lab-${key}`;
 
-function validate(values: FormValues): Partial<Record<FieldKey, string>> {
+function validate(values: FormValues, robots: RobotOption[]): Partial<Record<FieldKey, string>> {
   const errors: Partial<Record<FieldKey, string>> = {};
 
-  for (const { key, options } of SELECT_FIELDS) {
+  for (const { key, options } of selectFields(robots)) {
     if (options.length === 0) {
       errors[key] = "ยังไม่มีรายการให้เลือก รอข้อมูลจากทีม";
     } else if (!values[key]) {
@@ -129,8 +134,11 @@ function validate(values: FormValues): Partial<Record<FieldKey, string>> {
     }
   }
 
-  if (!values.participantCode.trim()) {
+  const code = values.participantCode.trim();
+  if (!code) {
     errors.participantCode = "กรุณาใส่รหัส";
+  } else if (!/^[A-Za-z0-9-]{3,24}$/.test(code)) {
+    errors.participantCode = "ใช้ได้เฉพาะตัวอักษร ตัวเลข และขีด 3–24 ตัว ห้ามใส่ชื่อ";
   }
 
   const duration = values.duration.trim();
@@ -221,33 +229,84 @@ function Rating({
   );
 }
 
-export default function LivingLabForm() {
+export default function LivingLabForm({ robots }: { robots: RobotOption[] }) {
   const [consent, setConsent] = useState<"pending" | "accepted" | "declined">("pending");
   const [values, setValues] = useState<FormValues>(EMPTY_VALUES);
   const [attempted, setAttempted] = useState(false);
   const [complete, setComplete] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const statusRef = useRef<HTMLDivElement>(null);
 
-  const errors = attempted ? validate(values) : {};
+  const errors = attempted ? validate(values, robots) : {};
   const errorKeys = Object.keys(errors) as FieldKey[];
 
   function update<K extends keyof FormValues>(key: K, value: FormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
     setComplete(false);
+    setSaveError(null);
   }
 
   function restart() {
     setValues(EMPTY_VALUES);
     setAttempted(false);
     setComplete(false);
+    setSaveError(null);
     setConsent("pending");
   }
 
-  function check(event: FormEvent<HTMLFormElement>) {
+  async function check(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAttempted(true);
-    setComplete(Object.keys(validate(values)).length === 0);
-    statusRef.current?.focus();
+    setSaveError(null);
+
+    if (Object.keys(validate(values, robots)).length > 0) {
+      setComplete(false);
+      statusRef.current?.focus();
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // Consent is confirmed by the facilitator in the step above; the API
+      // rejects the session outright when it is missing.
+      const response = await fetch("/api/living-lab/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          robotModelId: values.robot,
+          participantCode: values.participantCode.trim(),
+          participantGroup: values.group,
+          setting: values.setting,
+          activity: values.activity,
+          durationMinutes: Number(values.duration),
+          moodBefore: values.moodBefore,
+          moodAfter: values.moodAfter,
+          lonelinessBefore: values.lonelinessBefore,
+          lonelinessAfter: values.lonelinessAfter,
+          trustAfter: values.trust,
+          engagement: values.engagement,
+          safetyIncident: values.safetyIncident === "yes",
+          consentConfirmed: true
+        })
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        setSaveError(body?.error ?? "บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง");
+        setComplete(false);
+      } else {
+        setComplete(true);
+        setValues(EMPTY_VALUES);
+        setAttempted(false);
+      }
+    } catch {
+      setSaveError("ต่อกับเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่");
+      setComplete(false);
+    } finally {
+      setSaving(false);
+      statusRef.current?.focus();
+    }
   }
 
   const describe = (key: FieldKey, hintId?: string) =>
@@ -285,17 +344,11 @@ export default function LivingLabForm() {
 
       {consent === "accepted" && (
         <form onSubmit={check} noValidate>
-          <div className="ll-banner">
-            <strong>ยังบันทึกข้อมูลไม่ได้</strong>
-            <br />
-            ระบบบันทึกยังไม่พร้อม ข้อมูลในหน้านี้จะไม่ถูกส่งหรือเก็บไว้ที่ใด
-          </div>
-
           <section className="ll-section">
             <h2>ข้อมูลการทดลอง</h2>
             <p className="ll-tag">ผู้ดูแลกรอก</p>
 
-            {SELECT_FIELDS.map(({ key, options }) => (
+            {selectFields(robots).map(({ key, options }) => (
               <div className="ll-field" key={key}>
                 <label className="ll-question" htmlFor={fieldId(key)}>
                   {LABELS[key]}
@@ -338,7 +391,7 @@ export default function LivingLabForm() {
                 onChange={(event) => update("duration", event.target.value)}
               />
               <p id="living-lab-duration-hint" className="ll-hint">
-                ยังไม่ทราบหน่วย รอทีมยืนยัน
+หน่วยเป็นนาที เช่น 20
               </p>
               <ErrorText id={`${fieldId("duration")}-error`} message={errors.duration} />
             </div>
@@ -472,17 +525,24 @@ export default function LivingLabForm() {
                 </ul>
               </div>
             )}
-            {complete && (
-              <div className="ll-banner">
-                <strong>กรอกครบแล้ว แต่ยังไม่ได้บันทึก</strong>
+            {saveError && (
+              <div className="ll-summary">
+                <strong>บันทึกไม่สำเร็จ</strong>
                 <br />
-                ระบบบันทึกยังไม่พร้อม ข้อมูลนี้ยังไม่ถูกเก็บไว้ที่ใด
+                {saveError}
+              </div>
+            )}
+            {complete && (
+              <div className="ll-saved">
+                <strong>บันทึก Session เรียบร้อย</strong>
+                <br />
+                ตาราง Scorecard ด้านล่างอัปเดตแล้ว ฟอร์มพร้อมรับผู้เข้าร่วมคนถัดไป
               </div>
             )}
           </div>
 
-          <button type="submit" className="primary ll-button ll-submit">
-            ตรวจข้อมูล
+          <button type="submit" className="primary ll-button ll-submit" disabled={saving}>
+            {saving ? "กำลังบันทึก..." : "บันทึก Session"}
           </button>
         </form>
       )}
@@ -527,4 +587,6 @@ const STYLES = `
 .ll-summary ul { font-size: 16px; margin: 8px 0 0; padding-left: 20px; }
 .ll-summary a { color: var(--danger); text-decoration: underline; }
 .ll-banner { background: #fff8e8; border-left: 6px solid var(--warning); border-radius: 4px; font-size: 16px; padding: 12px 16px; }
+.ll-saved { background: var(--surface); border: 2px solid var(--success, #0E8A16); border-radius: 8px; padding: 12px 16px; }
+.ll-submit[disabled] { cursor: progress; opacity: 0.7; }
 `;
