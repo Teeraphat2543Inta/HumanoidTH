@@ -15,6 +15,7 @@ import {
   verifyAdminCredentials
 } from "@/lib/admin-session";
 import { isRoleSimulationEnabled, selfServiceUserUpsert, unverifiedRoleCookieValue } from "@/lib/user-roles";
+import { requireAdmin } from "@/lib/require-admin";
 
 async function setAdminSessionCookie(cookieStore: Awaited<ReturnType<typeof cookies>>, email: string) {
   cookieStore.set(ADMIN_SESSION_COOKIE, await createAdminSessionToken(email), adminSessionCookieOptions());
@@ -100,11 +101,13 @@ export async function createSubmission(formData: FormData) {
 }
 
 export async function updateSubmissionStatus(id: string, status: "APPROVED" | "REJECTED" | "NEEDS_REVIEW") {
+  await requireAdmin();
   await prisma.submittedData.update({ where: { id }, data: { status } });
   revalidateAtlasCms();
 }
 
 export async function runDataPull(formData: FormData) {
+  await requireAdmin();
   const adapter = String(formData.get("adapter") ?? "OPENALEX") as SourceType;
   const query = String(formData.get("query") ?? "").trim();
   const limit = Number(formData.get("limit") ?? 10);
@@ -236,6 +239,7 @@ export async function setLanguage(lang: "en" | "th") {
 }
 
 export async function upsertSourceRecordAction(formData: FormData) {
+  await requireAdmin();
   const id = readTextField(formData, "id");
   const url = readOptionalUrlField(formData, "url");
   const sourceType = readTextField(formData, "sourceType") as any;
@@ -275,6 +279,7 @@ export async function upsertSourceRecordAction(formData: FormData) {
 }
 
 export async function upsertRobotModelAction(formData: FormData) {
+  await requireAdmin();
   const id = readTextField(formData, "id");
   const canonicalName = readTextField(formData, "canonicalName");
 
@@ -314,6 +319,7 @@ export async function upsertRobotModelAction(formData: FormData) {
 }
 
 export async function upsertContributionAction(formData: FormData) {
+  await requireAdmin();
   const id = readTextField(formData, "id");
   const title = readTextField(formData, "title");
   const contributionType = readTextField(formData, "contributionType");
@@ -352,6 +358,7 @@ export async function upsertContributionAction(formData: FormData) {
 }
 
 export async function upsertSubmittedDataAction(formData: FormData) {
+  await requireAdmin();
   const id = readTextField(formData, "id");
   const title = readTextField(formData, "title");
   const submissionType = readTextField(formData, "submissionType");

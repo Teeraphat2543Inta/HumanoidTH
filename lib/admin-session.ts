@@ -132,6 +132,14 @@ export function verifyAdminBasicAuth(header: string | null) {
   }
 }
 
+// Where to send a caller without valid admin access, or null when access is valid.
+export async function adminLoginRedirectFor(token: string | undefined) {
+  if (!isAdminConfigured()) {
+    return "/admin-login?error=not_configured";
+  }
+  return (await verifyAdminSessionToken(token)) ? null : "/admin-login";
+}
+
 export function adminSessionCookieOptions(nodeEnv: string | undefined = process.env.NODE_ENV) {
   return {
     httpOnly: true,

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/require-admin";
 
 export type ContributionMapPoint = {
   id: string;
@@ -81,7 +82,7 @@ function getFallbackClusters(): ContributionMapPoint[] {
   ];
 }
 
-export async function analyzeClustersWithGemini(): Promise<ContributionMapPoint[]> {
+async function analyzeClustersWithGemini(): Promise<ContributionMapPoint[]> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey === "mock_key" || apiKey.trim() === "") {
     throw new Error("GEMINI_API_KEY environment variable is not set or is invalid.");
@@ -267,6 +268,8 @@ export async function fetchContributionClusters(): Promise<ContributionMapPoint[
 }
 
 export async function reanalyzeClustersWithGemini() {
+  await requireAdmin();
+
   try {
     await analyzeClustersWithGemini();
   } catch (e) {
