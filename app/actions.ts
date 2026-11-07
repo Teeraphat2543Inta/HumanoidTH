@@ -7,6 +7,11 @@ import type { SourceType } from "../generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { runAdapter } from "@/lib/ingest/adapters";
 import { canonicalizeUrl } from "@/lib/url";
+import { ADMIN_SESSION_COOKIE, adminSessionCookieOptions, createAdminSessionToken } from "@/lib/admin-session";
+
+async function setAdminSessionCookie(cookieStore: Awaited<ReturnType<typeof cookies>>, email: string) {
+  cookieStore.set(ADMIN_SESSION_COOKIE, await createAdminSessionToken(email), adminSessionCookieOptions());
+}
 
 function readTextField(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -147,7 +152,7 @@ export async function loginAsUser(email: string, role: string) {
   cookieStore.set("user_email", user.email, { path: "/" });
   cookieStore.set("user_role", user.role, { path: "/" });
   if (user.role === "ADMIN") {
-    cookieStore.set("admin_session", "true", { path: "/" });
+    await setAdminSessionCookie(cookieStore, user.email);
   } else {
     cookieStore.delete("admin_session");
   }
@@ -183,7 +188,7 @@ export async function registerAndLoginUser(formData: FormData) {
   cookieStore.set("user_email", user.email, { path: "/" });
   cookieStore.set("user_role", user.role, { path: "/" });
   if (user.role === "ADMIN") {
-    cookieStore.set("admin_session", "true", { path: "/" });
+    await setAdminSessionCookie(cookieStore, user.email);
   } else {
     cookieStore.delete("admin_session");
   }
@@ -219,7 +224,7 @@ export async function adminLoginAction(formData: FormData) {
     const cookieStore = await cookies();
     cookieStore.set("user_email", user.email, { path: "/" });
     cookieStore.set("user_role", "ADMIN", { path: "/" });
-    cookieStore.set("admin_session", "true", { path: "/" });
+    await setAdminSessionCookie(cookieStore, user.email);
     
     revalidateAtlasCms();
     redirect("/admin?collection=submitted-data");

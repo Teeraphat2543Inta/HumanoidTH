@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from "./lib/admin-session";
 
 const protectedPrefixes = ["/admin", "/data-pulls"];
 const protectedApiPrefixes = ["/api/ingest", "/api/export"];
@@ -11,13 +12,13 @@ function isProtectedApiPath(pathname: string) {
   return protectedApiPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // 1. Protect Web Pages (Redirect to actual UI login page)
   if (isProtectedPath(pathname)) {
-    const adminSession = request.cookies.get("admin_session")?.value;
-    if (adminSession !== "true") {
+    const adminSession = await verifyAdminSessionToken(request.cookies.get(ADMIN_SESSION_COOKIE)?.value);
+    if (!adminSession) {
       const loginUrl = new URL("/admin-login", request.url);
       loginUrl.searchParams.set("from", pathname);
       return NextResponse.redirect(loginUrl);
