@@ -7,3 +7,4 @@
 - Gap 5: visitors can register only as USER or RESEARCHER, and role simulators work only in development — ศิน
 - Gap 6: every admin server action checks the signed session on the server with requireAdmin() — ศิน
 - Hide internal curator notes shown as the robot use case on /robots cards — เกาเหลียง
+- Living Lab form for older adults: face scale under 1–5 for mood (😞→😄) and reversed for loneliness (5 = เหงามาก), touch targets of at least 44×44 px, larger text, `aria-label` and `required` kept — ปัด
