@@ -277,15 +277,16 @@ Set these variables in your Vercel project settings:
 ```env
 DATABASE_URL="prisma+postgres://accelerate.prisma-data.net/?api_key=..."
 NEXT_PUBLIC_APP_URL="https://your-project.vercel.app"
-ADMIN_BASIC_USER="creativelab.co.th@gmail.com"
+ADMIN_BASIC_USER="admin@example.com"
 ADMIN_BASIC_PASSWORD="use-a-strong-password"
+ADMIN_SESSION_SECRET="at-least-32-random-characters"
 YOUTUBE_API_KEY="your-api-key"
 GITHUB_TOKEN="your-token"
 GEMINI_API_KEY="your-gemini-api-key"
 ```
 
 > [!IMPORTANT]
-> - 🔒 Production endpoints `/admin/*`, `/data-pulls`, and `/api/ingest/*` are protected with Basic Auth using `ADMIN_BASIC_USER` and `ADMIN_BASIC_PASSWORD`. Keep credentials safe!
+> - 🔒 `/admin/*` and `/data-pulls` need a signed admin session, and `/api/ingest/*` and `/api/export` need Basic Auth. There are no default credentials: until `ADMIN_BASIC_USER`, `ADMIN_BASIC_PASSWORD` and `ADMIN_SESSION_SECRET` are all set to real values, admin pages stay locked and these APIs return `503`. Keep credentials safe!
 > - ⚙️ The Vercel build command is configured to run `pnpm vercel-build` which automatically handles schema generation. Do **not** run `db:push` inside the Vercel build phase.
 
 ---

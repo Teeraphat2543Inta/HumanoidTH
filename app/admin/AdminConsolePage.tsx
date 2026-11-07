@@ -2,6 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { getTranslation } from "@/lib/translations";
+import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from "@/lib/admin-session";
 import {
   updateSubmissionStatus,
   upsertContributionAction,
@@ -47,8 +48,7 @@ export default async function AdminConsolePage({ searchParams }: { searchParams:
   const cookieStore = await cookies();
   const lang = (cookieStore.get("lang")?.value || "en") as "en" | "th";
   const t = getTranslation(lang);
-  const currentRole = cookieStore.get("user_role")?.value;
-  const isAdmin = currentRole === "ADMIN";
+  const isAdmin = Boolean(await verifyAdminSessionToken(cookieStore.get(ADMIN_SESSION_COOKIE)?.value));
 
   const localT = {
     en: {
