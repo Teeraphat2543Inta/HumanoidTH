@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { NextRequest } from "next/server";
 import {
@@ -8,14 +9,45 @@ import {
   adminSessionCookieOptions,
   constantTimeEqual,
   createAdminSessionToken,
+  isAdminConfigured,
+  verifyAdminBasicAuth,
+  verifyAdminCredentials,
   verifyAdminSessionToken
 } from "../lib/admin-session";
 import { middleware } from "../middleware";
 
 // Throwaway value used only by this test file.
 const secret = "unit-test-only-secret-not-used-anywhere-else";
+const password = "unit-test-only-admin-password";
 const email = "admin@example.com";
 const now = 1_800_000_000_000;
+
+const adminEnvKeys = ["ADMIN_BASIC_USER", "ADMIN_BASIC_PASSWORD", "ADMIN_SESSION_SECRET"] as const;
+type AdminEnv = Partial<Record<(typeof adminEnvKeys)[number], string>>;
+const validAdminEnv: AdminEnv = { ADMIN_BASIC_USER: email, ADMIN_BASIC_PASSWORD: password, ADMIN_SESSION_SECRET: secret };
+
+async function withAdminEnv<T>(values: AdminEnv, run: () => T | Promise<T>) {
+  const saved = adminEnvKeys.map((key) => [key, process.env[key]] as const);
+  for (const key of adminEnvKeys) {
+    delete process.env[key];
+  }
+  Object.assign(process.env, values);
+  try {
+    return await run();
+  } finally {
+    for (const [key, value] of saved) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+}
+
+function basicAuth(user: string, pass: string) {
+  return `Basic ${Buffer.from(`${user}:${pass}`).toString("base64")}`;
+}
 
 function encode(value: unknown) {
   return Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -125,17 +157,7 @@ async function requestAdmin(path: string, cookie?: string) {
   if (cookie !== undefined) {
     headers.set("cookie", `${ADMIN_SESSION_COOKIE}=${cookie}`);
   }
-  const original = process.env.ADMIN_SESSION_SECRET;
-  process.env.ADMIN_SESSION_SECRET = secret;
-  try {
-    return await middleware(new NextRequest(`http://localhost:3000${path}`, { headers }));
-  } finally {
-    if (original === undefined) {
-      delete process.env.ADMIN_SESSION_SECRET;
-    } else {
-      process.env.ADMIN_SESSION_SECRET = original;
-    }
-  }
+  return withAdminEnv(validAdminEnv, () => middleware(new NextRequest(`http://localhost:3000${path}`, { headers })));
 }
 
 test("middleware redirects protected pages without a cookie or with a forged one", async () => {
@@ -161,4 +183,94 @@ test("middleware redirects when the signed cookie has expired", async () => {
   const token = await createAdminSessionToken(email, { secret, now: Date.now() - (ADMIN_SESSION_MAX_AGE_SECONDS + 1) * 1000 });
   const response = await requestAdmin("/admin", token);
   assert.equal(response.status, 307);
+});
+
+const incompleteAdminEnvs: Array<[string, AdminEnv]> = [
+  ["nothing set", {}],
+  ["no user", { ADMIN_BASIC_PASSWORD: password, ADMIN_SESSION_SECRET: secret }],
+  ["no password", { ADMIN_BASIC_USER: email, ADMIN_SESSION_SECRET: secret }],
+  ["no secret", { ADMIN_BASIC_USER: email, ADMIN_BASIC_PASSWORD: password }],
+  ["blank password", { ...validAdminEnv, ADMIN_BASIC_PASSWORD: "   " }],
+  ["short secret", { ...validAdminEnv, ADMIN_SESSION_SECRET: "too-short" }],
+  ["env example password", { ...validAdminEnv, ADMIN_BASIC_PASSWORD: "change-this-before-deploy" }],
+  ["readme password", { ...validAdminEnv, ADMIN_BASIC_PASSWORD: "use-a-strong-password" }],
+  ["docs password", { ...validAdminEnv, ADMIN_BASIC_PASSWORD: "<strong unique password>" }]
+];
+
+test("admin is configured only when user, real password and secret are all set", async () => {
+  await withAdminEnv(validAdminEnv, () => assert.equal(isAdminConfigured(), true));
+  for (const [name, env] of incompleteAdminEnvs) {
+    await withAdminEnv(env, () => assert.equal(isAdminConfigured(), false, name));
+  }
+});
+
+test("credentials match only the configured user and password", async () => {
+  await withAdminEnv(validAdminEnv, () => {
+    assert.equal(verifyAdminCredentials(email, password), true);
+    assert.equal(verifyAdminCredentials(email, "wrong"), false);
+    assert.equal(verifyAdminCredentials("other@example.com", password), false);
+    assert.equal(verifyAdminCredentials("", ""), false);
+  });
+});
+
+test("no credentials are accepted while admin is not fully configured", async () => {
+  for (const [name, env] of incompleteAdminEnvs) {
+    await withAdminEnv(env, () => {
+      assert.equal(verifyAdminCredentials(env.ADMIN_BASIC_USER ?? "", env.ADMIN_BASIC_PASSWORD ?? ""), false, name);
+    });
+  }
+});
+
+test("source code does not fall back to built in admin credentials", () => {
+  for (const file of ["middleware.ts", "app/actions.ts"]) {
+    assert.doesNotMatch(readFileSync(file, "utf8"), /ADMIN_BASIC_(USER|PASSWORD)\s*(\|\||\?\?)/, file);
+  }
+});
+
+test("basic auth accepts the right header, including a colon in the password", async () => {
+  await withAdminEnv(validAdminEnv, () => {
+    assert.equal(verifyAdminBasicAuth(basicAuth(email, password)), true);
+    assert.equal(verifyAdminBasicAuth(basicAuth(email, "wrong")), false);
+    for (const header of [null, "", "Bearer abc", "Basic", "Basic !!!not-base64!!!", `Basic ${Buffer.from("no-separator").toString("base64")}`]) {
+      assert.equal(verifyAdminBasicAuth(header), false);
+    }
+  });
+  const colonPassword = "unit:test:only:password";
+  await withAdminEnv({ ...validAdminEnv, ADMIN_BASIC_PASSWORD: colonPassword }, () => {
+    assert.equal(verifyAdminBasicAuth(basicAuth(email, colonPassword)), true);
+    assert.equal(verifyAdminBasicAuth(basicAuth(email, "unit")), false);
+  });
+});
+
+function requestApi(env: AdminEnv, path: string, authorization?: string) {
+  const headers = new Headers(authorization ? { authorization } : {});
+  return withAdminEnv(env, () => middleware(new NextRequest(`http://localhost:3000${path}`, { headers })));
+}
+
+test("protected API allows only valid basic auth when configured", async () => {
+  for (const path of ["/api/export", "/api/ingest/github"]) {
+    const allowed = await requestApi(validAdminEnv, path, basicAuth(email, password));
+    assert.equal(allowed.headers.get("x-middleware-next"), "1");
+    assert.equal((await requestApi(validAdminEnv, path, basicAuth(email, "wrong"))).status, 401);
+    assert.equal((await requestApi(validAdminEnv, path)).status, 401);
+  }
+});
+
+test("protected API returns 503 while admin is not fully configured", async () => {
+  for (const [name, env] of incompleteAdminEnvs) {
+    const authorization = basicAuth(env.ADMIN_BASIC_USER ?? email, env.ADMIN_BASIC_PASSWORD ?? password);
+    const response = await requestApi(env, "/api/export", authorization);
+    assert.equal(response.status, 503, name);
+  }
+});
+
+test("protected pages redirect with a not configured error, even with a once valid cookie", async () => {
+  const token = await createAdminSessionToken(email, { secret });
+  const headers = new Headers({ cookie: `${ADMIN_SESSION_COOKIE}=${token}` });
+  const env = { ADMIN_SESSION_SECRET: secret, ADMIN_BASIC_USER: email };
+  const response = await withAdminEnv(env, () => middleware(new NextRequest("http://localhost:3000/admin", { headers })));
+  assert.equal(response.status, 307);
+  const location = new URL(response.headers.get("location") ?? "");
+  assert.equal(location.pathname, "/admin-login");
+  assert.equal(location.searchParams.get("error"), "not_configured");
 });

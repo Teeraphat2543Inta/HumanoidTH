@@ -25,7 +25,7 @@ export default function AdminLoginForm({ from, emailLabel, passwordLabel, button
           type="email"
           className="login-input"
           required
-          placeholder="e.g. creativelab.co.th@gmail.com"
+          placeholder="e.g. admin@example.com"
         />
       </label>
 

@@ -6,6 +6,10 @@ export const ADMIN_SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 
 const MIN_SECRET_LENGTH = 32;
 
+// Example values published in .env.example and the docs. Anyone can read them,
+// so using one is treated the same as not configuring admin access at all.
+const PLACEHOLDER_PASSWORDS = new Set(["change-this-before-deploy", "use-a-strong-password", "<strong unique password>"]);
+
 export type AdminSession = {
   sub: string;
   exp: number;
@@ -86,6 +90,45 @@ export async function verifyAdminSessionToken(token: string | undefined, options
     return session.exp > nowSeconds ? { sub: session.sub, exp: session.exp } : null;
   } catch {
     return null;
+  }
+}
+
+function adminCredentials() {
+  const user = process.env.ADMIN_BASIC_USER?.trim();
+  const password = process.env.ADMIN_BASIC_PASSWORD?.trim();
+  if (!user || !password || PLACEHOLDER_PASSWORDS.has(password) || !usableSecret()) {
+    return null;
+  }
+  return { user, password };
+}
+
+export function isAdminConfigured() {
+  return adminCredentials() !== null;
+}
+
+export function verifyAdminCredentials(email: string, password: string) {
+  const expected = adminCredentials();
+  if (!expected) {
+    return false;
+  }
+  const userMatches = constantTimeEqual(email, expected.user);
+  const passwordMatches = constantTimeEqual(password, expected.password);
+  return userMatches && passwordMatches;
+}
+
+export function verifyAdminBasicAuth(header: string | null) {
+  if (!header?.startsWith("Basic ")) {
+    return false;
+  }
+  try {
+    const decoded = atob(header.slice("Basic ".length));
+    const separator = decoded.indexOf(":");
+    if (separator < 0) {
+      return false;
+    }
+    return verifyAdminCredentials(decoded.slice(0, separator), decoded.slice(separator + 1));
+  } catch {
+    return false;
   }
 }
 

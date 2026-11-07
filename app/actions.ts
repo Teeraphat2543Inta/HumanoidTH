@@ -7,7 +7,13 @@ import type { SourceType } from "../generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { runAdapter } from "@/lib/ingest/adapters";
 import { canonicalizeUrl } from "@/lib/url";
-import { ADMIN_SESSION_COOKIE, adminSessionCookieOptions, createAdminSessionToken } from "@/lib/admin-session";
+import {
+  ADMIN_SESSION_COOKIE,
+  adminSessionCookieOptions,
+  createAdminSessionToken,
+  isAdminConfigured,
+  verifyAdminCredentials
+} from "@/lib/admin-session";
 
 async function setAdminSessionCookie(cookieStore: Awaited<ReturnType<typeof cookies>>, email: string) {
   cookieStore.set(ADMIN_SESSION_COOKIE, await createAdminSessionToken(email), adminSessionCookieOptions());
@@ -211,10 +217,11 @@ export async function adminLoginAction(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "").trim();
 
-  const expectedUser = process.env.ADMIN_BASIC_USER || "creativelab.co.th@gmail.com";
-  const expectedPassword = process.env.ADMIN_BASIC_PASSWORD || "I@M_Cr3LabTH_F4M";
+  if (!isAdminConfigured()) {
+    redirect("/admin-login?error=not_configured");
+  }
 
-  if (email === expectedUser && password === expectedPassword) {
+  if (verifyAdminCredentials(email, password)) {
     const user = await prisma.user.upsert({
       where: { email },
       update: { role: "ADMIN" },

@@ -24,7 +24,8 @@ export const metadata: Metadata = {
       email: "Email Address",
       password: "Security Password",
       btn: "Authorize Session",
-      errorMsg: "Invalid credentials. Please verify your admin email and password."
+      errorMsg: "Invalid credentials. Please verify your admin email and password.",
+      notConfiguredMsg: "Admin access is not configured on this server yet."
     },
     th: {
       title: "การยืนยันตัวตนผู้ดูแลระบบ",
@@ -32,7 +33,8 @@ export const metadata: Metadata = {
       email: "อีเมลผู้ดูแลระบบ",
       password: "รหัสผ่านความปลอดภัย",
       btn: "ยืนยันสิทธิ์การเข้าใช้งาน",
-      errorMsg: "ข้อมูลการเข้าสู่ระบบไม่ถูกต้อง กรุณาตรวจสอบอีเมลและรหัสผ่านอีกครั้ง"
+      errorMsg: "ข้อมูลการเข้าสู่ระบบไม่ถูกต้อง กรุณาตรวจสอบอีเมลและรหัสผ่านอีกครั้ง",
+      notConfiguredMsg: "ระบบผู้ดูแลยังไม่ได้ตั้งค่าบนเซิร์ฟเวอร์นี้"
     }
   }[lang];
 
@@ -275,7 +277,7 @@ export const metadata: Metadata = {
 
           {error && (
             <div className="login-error">
-              {localT.errorMsg}
+              {error === "not_configured" ? localT.notConfiguredMsg : localT.errorMsg}
             </div>
           )}
 
