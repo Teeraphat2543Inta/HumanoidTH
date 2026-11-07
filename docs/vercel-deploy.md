@@ -7,8 +7,9 @@ Set these in Vercel Project Settings -> Environment Variables:
 ```env
 DATABASE_URL=prisma+postgres://accelerate.prisma-data.net/?api_key=...
 NEXT_PUBLIC_APP_URL=https://your-project.vercel.app
-ADMIN_BASIC_USER=creativelab.co.th@gmail.com
+ADMIN_BASIC_USER=admin@example.com
 ADMIN_BASIC_PASSWORD=<strong unique password>
+ADMIN_SESSION_SECRET=<at least 32 random characters>
 YOUTUBE_API_KEY=
 GITHUB_TOKEN=
 ```
@@ -31,11 +32,14 @@ Do not run `db:push` automatically during every Vercel build. Builds should gene
 
 ## Protected Routes
 
-In production, these routes require Basic Auth:
+These pages require a signed admin session from `/admin-login`:
 
 - `/admin/*`
 - `/data-pulls`
+
+These APIs require Basic Auth:
+
 - `/api/ingest/*`
 - `/api/export`
 
-If `ADMIN_BASIC_PASSWORD` is left as `change-this-before-deploy`, protected routes return `503`.
+There are no default credentials. If `ADMIN_BASIC_USER`, `ADMIN_BASIC_PASSWORD` or `ADMIN_SESSION_SECRET` is missing, or the password is still an example value such as `change-this-before-deploy`, admin login is disabled, the pages redirect to `/admin-login`, and the APIs return `503`.

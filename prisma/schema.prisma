@@ -5,7 +5,11 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Pooled endpoint for the app; Neon's PgBouncer keeps serverless
+  // connection counts down.
+  url       = env("DATABASE_URL")
+  // Migrations need a direct connection: PgBouncer cannot run them.
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 enum SourceType {
@@ -107,6 +111,7 @@ model RobotModel {
 
   @@index([robotType])
   @@index([thailandStatus])
+  wellnessSessions WellnessSession[]
 }
 
 model Entity {
@@ -249,4 +254,59 @@ model OwnedInventory {
   updatedAt          DateTime    @updatedAt
 
   @@index([robotModelId])
+  wellnessSessions WellnessSession[]
+  telemetry        RobotTelemetry[]
+}
+
+/// HRI Wellness Living Lab: one human-robot interaction session with before/after
+/// wellbeing self-ratings. Pseudonymous by design: no names, ID numbers or diagnoses.
+model WellnessSession {
+  id               String          @id @default(cuid())
+  robotModelId     String
+  robotModel       RobotModel      @relation(fields: [robotModelId], references: [id], onDelete: Cascade)
+  inventoryId      String?
+  inventory        OwnedInventory? @relation(fields: [inventoryId], references: [id], onDelete: SetNull)
+  participantCode  String
+  participantGroup String
+  setting          String
+  activity         String
+  durationMinutes  Int
+  moodBefore       Int
+  moodAfter        Int
+  lonelinessBefore Int
+  lonelinessAfter  Int
+  trustAfter       Int
+  engagement       Int?
+  safetyIncident   Boolean         @default(false)
+  consentConfirmed Boolean
+  facilitatorNotes String?
+  telemetry        RobotTelemetry[]
+  createdAt        DateTime        @default(now())
+
+  @@index([robotModelId])
+  @@index([createdAt])
+  @@index([participantGroup])
+}
+
+/// Physical AI link: interaction log pushed by the robot itself (signed webhook),
+/// matched to the Living Lab session recorded by the facilitator.
+model RobotTelemetry {
+  id               String           @id @default(cuid())
+  inventoryId      String
+  inventory        OwnedInventory   @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  sessionId        String?
+  session          WellnessSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  startedAt        DateTime
+  endedAt          DateTime
+  interactionCount Int
+  speechTurns      Int              @default(0)
+  touchEvents      Int              @default(0)
+  errorCount       Int              @default(0)
+  emergencyStops   Int              @default(0)
+  firmwareVersion  String?
+  receivedAt       DateTime         @default(now())
+
+  @@index([inventoryId])
+  @@index([sessionId])
+  @@index([startedAt])
 }

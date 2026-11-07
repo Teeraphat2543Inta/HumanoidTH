@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ADMIN_SESSION_COOKIE, isAdminConfigured, verifyAdminBasicAuth, verifyAdminSessionToken } from "./lib/admin-session";
 
 const protectedPrefixes = ["/admin", "/data-pulls"];
 const protectedApiPrefixes = ["/api/ingest", "/api/export"];
@@ -11,15 +12,19 @@ function isProtectedApiPath(pathname: string) {
   return protectedApiPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // 1. Protect Web Pages (Redirect to actual UI login page)
   if (isProtectedPath(pathname)) {
-    const adminSession = request.cookies.get("admin_session")?.value;
-    if (adminSession !== "true") {
+    const configured = isAdminConfigured();
+    const adminSession = configured ? await verifyAdminSessionToken(request.cookies.get(ADMIN_SESSION_COOKIE)?.value) : null;
+    if (!adminSession) {
       const loginUrl = new URL("/admin-login", request.url);
       loginUrl.searchParams.set("from", pathname);
+      if (!configured) {
+        loginUrl.searchParams.set("error", "not_configured");
+      }
       return NextResponse.redirect(loginUrl);
     }
     return NextResponse.next();
@@ -27,19 +32,15 @@ export function middleware(request: NextRequest) {
 
   // 2. Protect API Routes (Return 401 JSON without WWW-Authenticate header to prevent browser popups)
   if (isProtectedApiPath(pathname)) {
-    const expectedUser = process.env.ADMIN_BASIC_USER || "creativelab.co.th@gmail.com";
-    const expectedPassword = process.env.ADMIN_BASIC_PASSWORD || "I@M_Cr3LabTH_F4M";
+    if (!isAdminConfigured()) {
+      return new NextResponse(JSON.stringify({ error: "Admin access is not configured." }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
 
-    const header = request.headers.get("authorization");
-    if (header?.startsWith("Basic ")) {
-      try {
-        const [user, password] = atob(header.slice("Basic ".length)).split(":");
-        if (user === expectedUser && password === expectedPassword) {
-          return NextResponse.next();
-        }
-      } catch {
-        // Fall through to 401
-      }
+    if (verifyAdminBasicAuth(request.headers.get("authorization"))) {
+      return NextResponse.next();
     }
 
     return new NextResponse(JSON.stringify({ error: "Unauthorized. Admin credentials required." }), {
@@ -52,5 +53,6 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
+  runtime: "nodejs",
   matcher: ["/admin/:path*", "/data-pulls/:path*", "/api/ingest/:path*", "/api/export"]
 };
