@@ -6,3 +6,4 @@
 - Gap 4: removed built in admin credentials; admin stays locked until real values are configured — ศิน
 - Gap 5: visitors can register only as USER or RESEARCHER, and role simulators work only in development — ศิน
 - Gap 6: every admin server action checks the signed session on the server with requireAdmin() — ศิน
+- Hide internal curator notes shown as the robot use case on /robots cards — เกาเหลียง
