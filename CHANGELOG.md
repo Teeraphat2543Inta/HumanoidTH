@@ -4,3 +4,4 @@
 
 - Gap 3: signed admin session cookie (HMAC-SHA256, 8 hour expiry) checked in middleware and the admin console — ศิน
 - Gap 4: removed built in admin credentials; admin stays locked until real values are configured — ศิน
+- Gap 5: visitors can register only as USER or RESEARCHER, and role simulators work only in development — ศิน

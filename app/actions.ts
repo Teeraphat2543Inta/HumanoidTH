@@ -14,6 +14,7 @@ import {
   isAdminConfigured,
   verifyAdminCredentials
 } from "@/lib/admin-session";
+import { isRoleSimulationEnabled, selfServiceUserUpsert, unverifiedRoleCookieValue } from "@/lib/user-roles";
 
 async function setAdminSessionCookie(cookieStore: Awaited<ReturnType<typeof cookies>>, email: string) {
   cookieStore.set(ADMIN_SESSION_COOKIE, await createAdminSessionToken(email), adminSessionCookieOptions());
@@ -144,6 +145,10 @@ export async function runDataPull(formData: FormData) {
 }
 
 export async function loginAsUser(email: string, role: string) {
+  if (!isRoleSimulationEnabled()) {
+    redirect("/profile");
+  }
+
   const user = await prisma.user.upsert({
     where: { email },
     update: { role: role as any },
@@ -170,34 +175,18 @@ export async function loginAsUser(email: string, role: string) {
 export async function registerAndLoginUser(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
-  const role = String(formData.get("role") ?? "USER") as any;
   const redirectTo = String(formData.get("redirectTo") ?? "/profile");
 
   if (!email) {
     throw new Error("Email is required");
   }
 
-  const user = await prisma.user.upsert({
-    where: { email },
-    update: {
-      name: name || undefined,
-      role
-    },
-    create: {
-      email,
-      name: name || email.split("@")[0],
-      role
-    }
-  });
+  const user = await prisma.user.upsert(selfServiceUserUpsert({ email, name, role: formData.get("role") }));
 
   const cookieStore = await cookies();
   cookieStore.set("user_email", user.email, { path: "/" });
-  cookieStore.set("user_role", user.role, { path: "/" });
-  if (user.role === "ADMIN") {
-    await setAdminSessionCookie(cookieStore, user.email);
-  } else {
-    cookieStore.delete("admin_session");
-  }
+  cookieStore.set("user_role", unverifiedRoleCookieValue(user.role), { path: "/" });
+  cookieStore.delete(ADMIN_SESSION_COOKIE);
   revalidatePath("/profile");
   revalidateAtlasCms();
   redirect(redirectTo.startsWith("/") ? redirectTo : "/profile");
