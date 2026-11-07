@@ -74,6 +74,13 @@ function getStringField(meta: unknown, keys: string[]) {
   return null;
 }
 
+// The seed importer copies curator notes into primaryUseCase for robots from the JSON dataset
+// (lib/seed-importer.ts), so that value is not a use case and must not be shown to visitors.
+function getDisplayUseCase(robot: { primaryUseCase: string | null; sourceMeta: unknown }) {
+  if (asRecord(robot.sourceMeta)?.category === "robot_model") return null;
+  return robot.primaryUseCase;
+}
+
 function extractYoutubeVideoId(url: string | null) {
   if (!url) return null;
   try {
@@ -184,7 +191,7 @@ export default async function RobotsPage() {
               <h2>{robot.canonicalName}</h2>
               <p className="muted">{robot.description ?? "No description yet."}</p>
               <p><span className="badge">{robot.robotType}</span> <span className="badge">{robot.thailandStatus}</span></p>
-              <p><strong>{robot.manufacturer ?? robot.developerOrg ?? "Unknown developer"}</strong><br />{robot.primaryUseCase ?? "Use case unclassified"}</p>
+              <p><strong>{robot.manufacturer ?? robot.developerOrg ?? "Unknown developer"}</strong><br />{getDisplayUseCase(robot) ?? "Use case unclassified"}</p>
               {robot.officialUrl && <a href={robot.officialUrl} target="_blank" rel="noopener noreferrer">Source</a>}
             </article>
           );
