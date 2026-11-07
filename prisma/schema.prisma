@@ -5,7 +5,11 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Pooled endpoint for the app; Neon's PgBouncer keeps serverless
+  // connection counts down.
+  url       = env("DATABASE_URL")
+  // Migrations need a direct connection: PgBouncer cannot run them.
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 enum SourceType {
